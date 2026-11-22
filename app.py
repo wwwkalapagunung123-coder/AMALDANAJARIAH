@@ -18,7 +18,7 @@ ARTIFACT_PATH = (
     PROJECT_DIR
     / "artifacts"
     / "contracts"
-    / "donasi.sol"
+    / "crowdfunding.sol"
     / "AmalTransparan.json"
 )
 
