@@ -108,18 +108,6 @@ Untuk mencoba sebagai akun lain, isi private key-nya di menu **Dompet**.
 
 > Jangan pernah memakai private key dompet asli di aplikasi ini. Private key akun Hardhat sudah publik dan hanya aman untuk jaringan lokal.
 
-## Pemecahan masalah
-
-| Masalah | Penyebab dan solusi |
-|---|---|
-| `File deployment.json tidak ditemukan` | Kontrak belum di-deploy. Jalankan langkah deploy. |
-| `Artifact contract tidak ditemukan` | Jalankan `npx hardhat compile`. Pastikan file kontrak bernama `crowdfunding.sol` di folder `contracts`. |
-| `Tidak dapat terhubung ke Hardhat node` | Jalankan `npx hardhat node` di terminal terpisah. |
-| Pesan kuning "kontrak belum punya fungsi `salurkanDana`" | Kontrak yang ter-deploy masih versi lama. Compile ulang dan deploy ulang, lalu muat ulang browser. |
-| Transaksi gagal "Hanya pengelola program" | Akun penandatangan bukan pembuat program. Atur akun di menu **Dompet**. |
-| Chain ID MetaMask berbeda | Di MetaMask, tambahkan jaringan RPC `http://127.0.0.1:8545` dengan Chain ID `31337`. |
-| Tampilan tidak berubah setelah mengganti `app.py` | Muat ulang dengan Ctrl+Shift+R. |
-
 ## Catatan
 
 Proyek ini dibuat untuk praktikum blockchain di jaringan lokal. Kontraknya belum diaudit dan belum disiapkan untuk jaringan publik.
