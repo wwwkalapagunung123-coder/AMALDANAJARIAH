@@ -6,9 +6,10 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 /**
  * @title Crowdfunding / Amal Transparan
  * @notice Sistem donasi dengan aliran dana yang dapat dilacak 100% HALAL
+ * Alur: DIBUAT -> TERKUMPUL -> DISALURKAN -> SELESAI
  */
 contract AmalTransparan is ERC721URIStorage {
-    
+
     // Enum untuk mencatat status aliran dana program amal
     enum StatusProgram {
         DIBUAT,      // Program penggalangan dana dibuka
@@ -34,12 +35,11 @@ contract AmalTransparan is ERC721URIStorage {
         address aktor;
         uint256 jumlah;
         uint256 timestamp;
+        string keterangan;
     }
 
-    // 4. Pengaturan Token ID
     uint256 private nextTokenId = 1;
 
-    // Mapping untuk data program dan riwayat
     mapping(uint256 => ProgramAmal) public daftarProgram;
     mapping(uint256 => RiwayatAmal[]) private riwayatProgram;
 
@@ -47,11 +47,18 @@ contract AmalTransparan is ERC721URIStorage {
     event ProgramDibuat(uint256 indexed tokenId, address indexed pembuat, string namaProgram, uint256 targetDana);
     event DonasiDiterima(uint256 indexed tokenId, address indexed donatur, uint256 jumlah);
     event DanaDisalurkan(uint256 indexed tokenId, address indexed penerima, uint256 jumlah);
+    event ProgramSelesai(uint256 indexed tokenId, address indexed pengelola);
 
-    // 3. Constructor ERC-721
     constructor() ERC721("Sertifikat Amal Transparan", "AMAL") {}
 
-    // 5. & 8. Fungsi Pembuatan Program (Minting NFT Sertifikat Bukti Program Amal)
+    // Hanya pemilik NFT (pengelola) program yang boleh memanggil
+    modifier hanyaPengelola(uint256 tokenId) {
+        require(_ownerOf(tokenId) != address(0), "Program amal tidak ditemukan");
+        require(msg.sender == ownerOf(tokenId), "Hanya pengelola program");
+        _;
+    }
+
+    // Fungsi Pembuatan Program (Minting NFT Sertifikat Bukti Program Amal)
     function buatProgramAmal(
         string memory namaProgram,
         string memory deskripsi,
@@ -63,13 +70,11 @@ contract AmalTransparan is ERC721URIStorage {
 
         uint256 tokenId = nextTokenId;
 
-        // Mint NFT bukti kepemilikan/pengelolaan program amal
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, metadataURI);
 
         nextTokenId++;
 
-        // Simpan Data Program
         daftarProgram[tokenId] = ProgramAmal({
             tokenId: tokenId,
             namaProgram: namaProgram,
@@ -80,12 +85,12 @@ contract AmalTransparan is ERC721URIStorage {
             createdAt: block.timestamp
         });
 
-        // Simpan Riwayat
         riwayatProgram[tokenId].push(RiwayatAmal({
             aksi: "PROGRAM_DIBUAT",
             aktor: msg.sender,
             jumlah: 0,
-            timestamp: block.timestamp
+            timestamp: block.timestamp,
+            keterangan: "Program amal dibuat oleh pengelola"
         }));
 
         emit ProgramDibuat(tokenId, msg.sender, namaProgram, targetDana);
@@ -94,9 +99,14 @@ contract AmalTransparan is ERC721URIStorage {
 
     // Fungsi Donasi (Mencatat aliran dana secara transparan & halal)
     function donasi(uint256 tokenId) public payable {
-        ProgramAmal storage program = daftarProgram[tokenId];
         require(_ownerOf(tokenId) != address(0), "Program amal tidak ditemukan");
         require(msg.value > 0, "Jumlah donasi harus lebih dari 0");
+
+        ProgramAmal storage program = daftarProgram[tokenId];
+        require(
+            program.status == StatusProgram.DIBUAT || program.status == StatusProgram.TERKUMPUL,
+            "Program sudah ditutup"
+        );
 
         program.danaTerkumpul += msg.value;
 
@@ -108,13 +118,65 @@ contract AmalTransparan is ERC721URIStorage {
             aksi: "DONASI_DITERIMA",
             aktor: msg.sender,
             jumlah: msg.value,
-            timestamp: block.timestamp
+            timestamp: block.timestamp,
+            keterangan: ""
         }));
 
         emit DonasiDiterima(tokenId, msg.sender, msg.value);
     }
 
-    // 6. Fungsi Cek Pemilik / Pengelola Program Amal
+    // Pengelola menyalurkan seluruh dana terkumpul ke penerima manfaat
+    function salurkanDana(
+        uint256 tokenId,
+        address payable penerima,
+        string memory keterangan
+    ) public hanyaPengelola(tokenId) {
+        require(penerima != address(0), "Alamat penerima tidak valid");
+
+        ProgramAmal storage program = daftarProgram[tokenId];
+        require(program.status == StatusProgram.TERKUMPUL, "Dana belum terkumpul");
+
+        uint256 jumlah = program.danaTerkumpul;
+
+        // Ubah status & catat riwayat SEBELUM mengirim ETH
+        program.status = StatusProgram.DISALURKAN;
+
+        riwayatProgram[tokenId].push(RiwayatAmal({
+            aksi: "DANA_DISALURKAN",
+            aktor: penerima,
+            jumlah: jumlah,
+            timestamp: block.timestamp,
+            keterangan: keterangan
+        }));
+
+        (bool ok, ) = penerima.call{value: jumlah}("");
+        require(ok, "Transfer ke penerima gagal");
+
+        emit DanaDisalurkan(tokenId, penerima, jumlah);
+    }
+
+    // Pengelola menutup program setelah dana disalurkan
+    function selesaikanProgram(
+        uint256 tokenId,
+        string memory catatan
+    ) public hanyaPengelola(tokenId) {
+        ProgramAmal storage program = daftarProgram[tokenId];
+        require(program.status == StatusProgram.DISALURKAN, "Dana belum disalurkan");
+
+        program.status = StatusProgram.SELESAI;
+
+        riwayatProgram[tokenId].push(RiwayatAmal({
+            aksi: "PROGRAM_SELESAI",
+            aktor: msg.sender,
+            jumlah: 0,
+            timestamp: block.timestamp,
+            keterangan: catatan
+        }));
+
+        emit ProgramSelesai(tokenId, msg.sender);
+    }
+
+    // Fungsi Cek Pemilik / Pengelola Program Amal
     function getPengelolaProgram(uint256 tokenId) public view returns (address) {
         require(_ownerOf(tokenId) != address(0), "Program amal tidak ditemukan");
         return ownerOf(tokenId);
